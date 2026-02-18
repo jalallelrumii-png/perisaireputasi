@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { analisaUlasanAI } from '@/lib/groq';
-import { account } from '@/lib/appwrite';
+import { account, databases } from '@/lib/appwrite';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, ShieldAlert, Settings, LogOut, Copy } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Settings, LogOut, Copy, Database, MessageSquare, Info } from 'lucide-react';
+import { ID } from 'appwrite';
 
 export default function Dashboard() {
     const [teks, setTeks] = useState('');
@@ -24,57 +25,149 @@ export default function Dashboard() {
     const handleAnalisis = async () => {
         const key = localStorage.getItem('perisai_token');
         if (!key) return router.push('/pengaturan');
+        
         setLoading(true);
         try {
             const data = await analisaUlasanAI(key, teks);
             setHasil(data);
-        } catch (e) { alert(e.message) }
-        finally { setLoading(false) }
+
+            await databases.createDocument(
+                process.env.NEXT_PUBLIC_DATABASE_ID,
+                process.env.NEXT_PUBLIC_COLLECTION_ID,
+                ID.unique(),
+                {
+                    ulasan: teks,
+                    sentimen: data.sentimen,
+                    isBot: data.deteksi_bot,
+                    balasan: data.balasan_saran,
+                    waUser: waUser
+                }
+            );
+        } catch (e) { 
+            alert("API Key Groq tidak valid atau limit habis. Cek Pengaturan.");
+        } finally { 
+            setLoading(false);
+        }
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 text-black">
-            <div className="bg-white p-5 shadow-sm flex justify-between items-center px-8 border-b sticky top-0 z-50">
-                <span className="font-black text-blue-600 italic text-xl tracking-tighter">PerisaiReputasi</span>
-                <div className="flex gap-4">
-                    <button onClick={() => router.push('/pengaturan')} className="text-gray-400"><Settings size={22}/></button>
-                    <button onClick={handleLogout} className="text-red-500"><LogOut size={22}/></button>
+        <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
+            {/* Navbar Modern */}
+            <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-slate-200">
+                <div className="max-w-5xl mx-auto px-6 h-16 flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-blue-600 p-1.5 rounded-lg">
+                            <ShieldCheck className="text-white" size={20}/>
+                        </div>
+                        <span className="font-black text-xl tracking-tight text-blue-600">PerisaiReputasi</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="hidden md:block text-right mr-2">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Petugas</p>
+                            <p className="text-xs font-bold text-slate-700">+{waUser}</p>
+                        </div>
+                        <button onClick={() => router.push('/pengaturan')} className="p-2 hover:bg-slate-100 rounded-full transition-all text-slate-500">
+                            <Settings size={20}/>
+                        </button>
+                        <button onClick={handleLogout} className="p-2 hover:bg-red-50 rounded-full transition-all text-red-500">
+                            <LogOut size={20}/>
+                        </button>
+                    </div>
                 </div>
-            </div>
+            </nav>
 
-            <div className="max-w-xl mx-auto p-6">
-                <div className="bg-white p-8 rounded-[2rem] shadow-sm border mb-6">
-                    <h2 className="font-bold mb-4">Input Ulasan</h2>
-                    <textarea 
-                        className="w-full h-40 p-5 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 text-sm mb-4 resize-none border-none"
-                        placeholder="Tempel ulasan di sini..."
-                        value={teks}
-                        onChange={(e) => setTeks(e.target.value)}
-                    />
-                    <button onClick={handleAnalisis} disabled={loading || !teks} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold">
-                        {loading ? "Llama 3.3 Sedang Memeriksa..." : "Analisis Sekarang"}
-                    </button>
-                </div>
-
-                {hasil && (
-                    <div className="space-y-4 animate-in fade-in duration-500">
-                        <div className={`p-6 rounded-[2rem] flex items-center gap-5 border-2 ${hasil.deteksi_bot ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
-                            {hasil.deteksi_bot ? <ShieldAlert className="text-red-500" size={40}/> : <ShieldCheck className="text-green-500" size={40}/>}
+            <main className="max-w-4xl mx-auto p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                {/* Kolom Kiri: Input & Instruksi */}
+                <div className="md:col-span-2 space-y-6">
+                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="bg-blue-100 p-2 rounded-xl text-blue-600">
+                                <MessageSquare size={20}/>
+                            </div>
                             <div>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">Status Keamanan</p>
-                                <p className={`text-xl font-black ${hasil.deteksi_bot ? 'text-red-600' : 'text-green-600'}`}>{hasil.deteksi_bot ? "BOT / SPAM" : "AMAN"}</p>
+                                <h2 className="font-bold text-lg">Input Ulasan Klien</h2>
+                                <p className="text-xs text-slate-500">Tempel ulasan dari Google Maps atau Marketplace</p>
                             </div>
                         </div>
-                        <div className="bg-white p-8 rounded-[2rem] shadow-sm border">
-                            <div className="flex justify-between items-center mb-4">
-                                <p className="text-[10px] font-bold text-slate-300 uppercase italic">Balasan AI (Llama 3.3 70B)</p>
-                                <button onClick={() => {navigator.clipboard.writeText(hasil.balasan_saran); alert("Disalin!")}} className="text-blue-500"><Copy size={16}/></button>
+                        
+                        <textarea 
+                            className="w-full h-48 p-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-blue-500 focus:bg-white transition-all outline-none text-sm font-medium resize-none"
+                            placeholder="Contoh: Barangnya bagus tapi pengiriman lama banget..."
+                            value={teks}
+                            onChange={(e) => setTeks(e.target.value)}
+                        />
+                        
+                        <button 
+                            onClick={handleAnalisis} 
+                            disabled={loading || !teks} 
+                            className={`w-full mt-4 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all ${
+                                !teks ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:scale-[1.02] active:scale-95'
+                            }`}
+                        >
+                            {loading ? (
+                                <span className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    Menganalisis...
+                                </span>
+                            ) : "Mulai Analisis AI"}
+                        </button>
+                    </div>
+
+                    {/* Tampilan Hasil (Hanya muncul jika ada hasil) */}
+                    {hasil && (
+                        <div className="animate-in fade-in zoom-in duration-300 space-y-4">
+                            <div className={`p-6 rounded-3xl border-2 flex items-center gap-4 ${hasil.deteksi_bot ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                                {hasil.deteksi_bot ? <ShieldAlert className="text-red-500" size={32}/> : <ShieldCheck className="text-emerald-500" size={32}/>}
+                                <div>
+                                    <h3 className={`font-black text-lg ${hasil.deteksi_bot ? 'text-red-700' : 'text-emerald-700'}`}>
+                                        {hasil.deteksi_bot ? "Terdeteksi Bot/Spam!" : "Ulasan Organik (Asli)"}
+                                    </h3>
+                                    <p className="text-xs font-medium opacity-70">Sentimen: {hasil.sentimen.toUpperCase()}</p>
+                                </div>
                             </div>
-                            <p className="text-slate-700 text-sm leading-relaxed italic">"{hasil.balasan_saran}"</p>
+
+                            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-3 py-1 rounded-full uppercase">Saran Balasan</span>
+                                    <button onClick={() => {navigator.clipboard.writeText(hasil.balasan_saran); alert("Disalin!")}} className="text-slate-400 hover:text-blue-600 transition-colors">
+                                        <Copy size={18}/>
+                                    </button>
+                                </div>
+                                <p className="text-slate-700 font-medium leading-relaxed italic">
+                                    "{hasil.balasan_saran}"
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Kolom Kanan: Info & Bantuan */}
+                <div className="space-y-6">
+                    <div className="bg-blue-600 p-6 rounded-3xl text-white shadow-xl shadow-blue-100">
+                        <h3 className="font-bold mb-2 flex items-center gap-2">
+                            <Info size={18}/> Tips Cepat
+                        </h3>
+                        <ul className="text-xs space-y-3 opacity-90">
+                            <li className="flex gap-2"><span>•</span> Gunakan ulasan minimal 5 kata untuk hasil akurat.</li>
+                            <li className="flex gap-2"><span>•</span> AI akan mendeteksi pola bahasa mesin secara otomatis.</li>
+                            <li className="flex gap-2"><span>•</span> Klik ikon copy untuk membalas ulasan dengan cepat.</li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Database size={18} className="text-slate-400"/>
+                            <h3 className="font-bold text-sm">Status Database</h3>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <p className="text-[11px] font-bold text-slate-600 uppercase">Terhubung ke Cloud</p>
                         </div>
                     </div>
-                )}
-            </div>
+                </div>
+
+            </main>
         </div>
     );
 }
